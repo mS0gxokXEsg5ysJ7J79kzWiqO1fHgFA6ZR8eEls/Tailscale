@@ -52,10 +52,10 @@ jobs:
       # ============================================================
       - name: 2. Create Admin Account
         env:
-          WINDOWS_RDP_PASSWORD: ${{ secrets.WINDOWS_RDP_PASSWORD }}
+          WINDOWS_PASSWORD: ${{ secrets.WINDOWS_PASSWORD }}
         run: |
           # 将明文密码转为 PowerShell 安全字符串对象（New-LocalUser 要求此格式）
-          $Password = ConvertTo-SecureString "$Env:WINDOWS_RDP_PASSWORD" -AsPlainText -Force
+          $Password = ConvertTo-SecureString "$Env:WINDOWS_PASSWORD" -AsPlainText -Force
 
           # 创建本地用户 Admin，密码永不过期
           # -ErrorAction SilentlyContinue：若用户已存在则静默跳过，不报错中断
@@ -66,7 +66,7 @@ jobs:
 
           # 同时修改 GitHub Actions 自带的 runneradmin 账号密码
           # 这样两个账号都能用同一个密码登录 RDP
-          net user runneradmin "$Env:WINDOWS_RDP_PASSWORD"
+          net user runneradmin "$Env:WINDOWS_PASSWORD"
 
       # ============================================================
       # 第三步：安装 Tailscale VPN 并建立隧道
@@ -105,7 +105,7 @@ jobs:
           Write-Host "  >>> RDP SERVER IS READY! <<<" -ForegroundColor Cyan
           Write-Host "  Tailscale IP : $ts_ip" -ForegroundColor Yellow
           Write-Host "  Username     : Admin" -ForegroundColor Yellow
-          Write-Host "  Password     : $Env:WINDOWS_RDP_PASSWORD" -ForegroundColor Yellow
+          Write-Host "  Password     : $Env:WINDOWS_PASSWORD" -ForegroundColor Yellow
           Write-Host "  >> Open mstsc and connect to: $ts_ip" -ForegroundColor Magenta
           Write-Host "==========================================" -ForegroundColor Green
 
