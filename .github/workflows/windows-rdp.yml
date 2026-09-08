@@ -8,17 +8,17 @@ name: Windows Cloud RDP
 on:
   # 保留手动触发入口
   workflow_dispatch:
-  # 每6小时自动重新触发一次（UTC时间）
+  # 每48小时自动重新触发一次（UTC时间）
   # 分 时 日 月 周
   schedule:
-    - cron: '0 */48 * * *'
+    - cron: '0 0 */2 * *'
 
 jobs:
   build:
     # 使用最新版 Windows Server 虚拟机（2核 8GB RAM）
     runs-on: windows-latest
 
-    # GitHub 免费账号最大超时上限：360分钟（6小时）
+    # GitHub 保活时长
     timeout-minutes: 2880
 
     steps:
@@ -26,6 +26,9 @@ jobs:
       # ============================================================
       # 第一步：开启远程桌面服务 + 放行防火墙
       # ============================================================
+      - name: 0. Set Device Name
+        run: Rename-Computer -NewName "TailscaleCloudPC" -Force
+
       - name: 1. Enable Remote Desktop & Firewall
         run: |
           # 修改注册表：将"拒绝RDP连接"从1改为0，即允许远程桌面连入
@@ -102,14 +105,14 @@ jobs:
           Write-Host "==========================================" -ForegroundColor Green
 
       # ============================================================
-      # 第四步：保活循环（撑满6小时上限）
+      # 第四步：循环保活
       # 原理：每60秒打印一次心跳日志，防止 Actions 因无输出被判定超时
-      # 2880次 × 60秒 = 172800秒 = 48小时（实际被 timeout-minutes:360 截断）
+      # 2880次 × 60秒 = 172800秒 = 48小时
       # ============================================================
       - name: 4. Keep Server Alive
         run: |
-          # 计算本次任务到期时间（当前时间 + 355分钟，留5分钟缓冲）
-          $deadline = (Get-Date).AddMinutes(355)
+          # 计算本次任务到期时间（当前时间 + N分钟，留5分钟缓冲）
+          $deadline = (Get-Date).AddMinutes(2875); $totalMinutes = 2875
 
           $i = 1
           # 循环直到接近超时时间为止
@@ -117,7 +120,7 @@ jobs:
               Start-Sleep -Seconds 60
               # 打印当前时间 + 剩余时间，方便在日志中确认服务器状态
               $remaining = [int]($deadline - (Get-Date)).TotalMinutes
-              Write-Host "[$i] $(Get-Date -Format 'HH:mm:ss') | 剩余约 $remaining 分钟 | Server running..."
+              Write-Host "[$i] $(Get-Date -Format 'HH:mm:ss') | 已运行 $i 分钟 / 共2875分钟 | 剩余约 $remaining 分钟 | Server running..."
               $i++
           }
-          Write-Host "任务即将到达上限，本次会话结束，等待下次 cron 自动触发。"
+          Write-Host "任务即将到达上限，本次48小时会话结束，等待下次 cron 自动触发。"
