@@ -33,7 +33,7 @@ jobs:
       # 失败不中断，继续执行后续步骤
       # ============================================================
       - name: 0. Set Hostname
-        run: hostname "TailscaleCloudLinux" || echo "Hostname set skipped, continuing..."
+        run: hostname "Debian Tailscale" || echo "Hostname set skipped, continuing..."
 
       # ============================================================
       # 第一步：安装并启动 SSH 服务，设置 root 密码
@@ -111,7 +111,8 @@ jobs:
           # 手动后台启动 tailscaled 守护进程
           # --tun=userspace-networking → 用户态网络模式，不需要 tun 设备（容器必须）
           # --socks5-server=localhost:1055 → 同时开启本地 SOCKS5 代理端口
-          tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &
+          # 直接用 tun 模式，所有端口全通，一劳永逸。
+          tailscaled &
 
           # 等待 tailscaled 完成初始化
           sleep 5
