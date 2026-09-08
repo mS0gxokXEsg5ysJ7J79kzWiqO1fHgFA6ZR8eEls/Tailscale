@@ -35,7 +35,9 @@ jobs:
         run: |
           apt-get install -y curl iptables iproute2 ca-certificates
           curl -fsSL https://tailscale.com/install.sh | sh
-          tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="GitHub-SSH-Server"
+          tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &
+          sleep 5
+          tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="GitHub-SSH-Server" --accept-routes
           sleep 5
           ts_ip=$(tailscale ip -4)
           echo ""
