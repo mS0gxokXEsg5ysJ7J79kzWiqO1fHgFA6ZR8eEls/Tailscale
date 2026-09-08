@@ -1,0 +1,65 @@
+name: Linux Cloud SSH
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 */2 * *'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: debian:latest
+    timeout-minutes: 2880
+
+    steps:
+
+      - name: 0. Set Hostname
+        run: hostnamectl set-hostname "TailscaleCloudLinux"
+
+      - name: 1. Enable SSH & Set Root Password
+        env:
+          SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
+        run: |
+          apt-get update -y
+          apt-get install -y openssh-server
+          mkdir -p /run/sshd
+          echo "root:$SSH_PASSWORD" | chpasswd
+          cat > /etc/ssh/sshd_config << EOF
+          Port 22
+          PermitRootLogin yes
+          PasswordAuthentication yes
+          PubkeyAuthentication yes
+          UsePAM yes
+          EOF
+          /usr/sbin/sshd
+
+      - name: 2. Install & Connect Tailscale VPN
+        env:
+          TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          apt-get install -y curl
+          curl -fsSL https://tailscale.com/install.sh | sh
+          tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="GitHub-SSH-Server"
+          sleep 5
+          ts_ip=$(tailscale ip -4)
+          echo ""
+          echo "=========================================="
+          echo "  >>> SSH SERVER IS READY! <<<"
+          echo "  Tailscale IP : $ts_ip"
+          echo "  Username     : root"
+          echo "  Password     : (见 Secrets: SSH_PASSWORD)"
+          echo "  >> ssh root@$ts_ip"
+          echo "=========================================="
+
+      - name: 3. Keep Server Alive
+        run: |
+          deadline=$((SECONDS + 2875 * 60))
+          i=1
+          while [ $SECONDS -lt $deadline ]; do
+            sleep 60
+            remaining=$(( (deadline - SECONDS) / 60 ))
+            echo "[$i] $(date '+%H:%M:%S') | 已运行 $i 分钟 / 共2875分钟 | 剩余约 $remaining 分钟 | Server running..."
+            i=$((i + 1))
+          done
+          echo "本次48小时会话结束。"
