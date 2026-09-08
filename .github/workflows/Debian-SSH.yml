@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: debian:latest
+      options: --user root
     timeout-minutes: 2880
 
     steps:
