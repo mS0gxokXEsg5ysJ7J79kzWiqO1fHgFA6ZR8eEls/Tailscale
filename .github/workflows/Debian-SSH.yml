@@ -15,7 +15,7 @@ jobs:
     steps:
 
       - name: 0. Set Hostname
-        run: echo "TailscaleCloudLinux" > /etc/hostname && hostname "TailscaleCloudLinux"
+        run: sudo bash -c 'echo "TailscaleCloudLinux" > /etc/hostname && hostname "TailscaleCloudLinux"'
 
       - name: 1. Enable SSH & Set Root Password
         env:
