@@ -50,6 +50,7 @@ jobs:
           echo "=========================================="
 
       - name: 3. Keep Server Alive
+        shell: bash
         run: |
           deadline=$((SECONDS + 2875 * 60))
           i=1
