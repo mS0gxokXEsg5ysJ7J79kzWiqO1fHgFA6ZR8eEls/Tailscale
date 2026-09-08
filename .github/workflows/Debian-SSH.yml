@@ -15,30 +15,30 @@ jobs:
     steps:
 
       - name: 0. Set Hostname
-        run: hostnamectl set-hostname "TailscaleCloudLinux"
+        run: echo "TailscaleCloudLinux" > /etc/hostname && hostname "TailscaleCloudLinux"
 
       - name: 1. Enable SSH & Set Root Password
         env:
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
         run: |
           apt-get update -y
-          apt-get install -y openssh-server
+          apt-get install -y openssh-server procps
           mkdir -p /run/sshd
           echo "root:$SSH_PASSWORD" | chpasswd
-          cat > /etc/ssh/sshd_config << EOF
-          Port 22
-          PermitRootLogin yes
-          PasswordAuthentication yes
-          PubkeyAuthentication yes
-          UsePAM yes
-          EOF
-          /usr/sbin/sshd
+cat > /etc/ssh/sshd_config << EOF
+Port 22
+PermitRootLogin yes
+PasswordAuthentication yes
+PubkeyAuthentication yes
+UsePAM yes
+EOF
+          /usr/sbin/sshd -D &
 
       - name: 2. Install & Connect Tailscale VPN
         env:
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
-          apt-get install -y curl
+          apt-get install -y curl iptables iproute2 ca-certificates
           curl -fsSL https://tailscale.com/install.sh | sh
           tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="GitHub-SSH-Server"
           sleep 5
