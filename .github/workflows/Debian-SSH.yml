@@ -74,18 +74,18 @@ jobs:
       - name: 2. Install 3x-ui Panel
         shell: bash
         run: |
-          # 安装必要依赖
-          apt-get install -y curl wget
-
-          # 一键安装 3x-ui（自动选择最新版本）
-          # -y 参数自动确认所有提示，实现无人值守安装
-          echo "y" | bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
-
-          # 等待面板完全启动
+          apt-get install -y curl wget unzip
+          # 直接下载二进制，绕过 systemd 依赖
+          mkdir -p /usr/local/x-ui
+          latest=$(curl -Ls "https://api.github.com/repos/MHSanaei/3x-ui/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
+          curl -Ls "https://github.com/MHSanaei/3x-ui/releases/download/${latest}/x-ui-linux-amd64.tar.gz" -o /tmp/x-ui.tar.gz
+          tar -xzf /tmp/x-ui.tar.gz -C /usr/local/x-ui
+          chmod +x /usr/local/x-ui/x-ui
+          # 直接前台运行（后台挂起）
+          /usr/local/x-ui/x-ui &
           sleep 10
-
-          ss -tlnp | grep 2053 && echo "2053端口已监听" || echo "2053端口未监听，3x-ui未启动"
-          x-ui status || echo "x-ui状态异常"
+          apt-get install -y iproute2
+          ss -tlnp | grep 2053 && echo "2053端口已监听" || echo "2053端口未监听"
 
           echo "=========================================="
           echo "  >>> 3x-ui 面板已部署! <<<"
