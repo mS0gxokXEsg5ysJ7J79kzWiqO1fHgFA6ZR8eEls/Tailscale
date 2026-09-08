@@ -1,141 +1,45 @@
-# ============================================================
-# 工作流名称：Linux 云端 SSH + 3x-ui 代理面板
-# 功能：在 GitHub Actions 上启动一台 Debian 虚拟机
-#       开启 SSH，部署 3x-ui 面板，通过 Tailscale VPN 供外部连接
-# ============================================================
 name: Linux Cloud SSH
 
 on:
-  # 保留手动触发入口，方便随时手动启动
   workflow_dispatch:
-  # 每48小时自动重新触发一次（UTC时间 每2天0点）
   schedule:
     - cron: '0 0 */2 * *'
 
 jobs:
   build:
-    # 使用 Ubuntu 作为宿主机 Runner（GitHub 不提供 Debian Runner）
     runs-on: ubuntu-latest
-
     container:
-      # 在 Ubuntu 宿主机上运行 Debian 最新版容器
       image: debian:latest
-      # 强制以 root 用户身份运行容器，避免权限不足
-      options: --user root --privileged
-
-    # 付费账号最大保活时长：2880分钟（48小时）
+      options: --user root
     timeout-minutes: 2880
 
     steps:
 
-      # ============================================================
-      # 第零步：设置主机名
-      # 失败不中断，继续执行后续步骤
-      # ============================================================
       - name: 0. Set Hostname
-        run: hostname "Debian Tailscale" || echo "Hostname set skipped, continuing..."
+        run: hostname "TailscaleCloudLinux" || echo "Hostname set skipped, continuing..."
 
-      # ============================================================
-      # 第一步：安装并启动 SSH 服务，设置 root 密码
-      # ============================================================
       - name: 1. Enable SSH & Set Root Password
         env:
-          # 从 GitHub Secrets 读取 root 密码，避免明文泄露
           SSH_PASSWORD: ${{ secrets.SSH_PASSWORD }}
         run: |
-          # 更新 apt 软件源索引
           apt-get update -y
-
-          # 安装 SSH 服务端 和 procps（提供 ps 等进程管理命令）
           apt-get install -y openssh-server procps
-
-          # 创建 sshd 运行所需的目录（容器内默认不存在）
           mkdir -p /run/sshd
-
-          # 设置 root 账号密码（从 Secrets 读取）
           echo "root:$SSH_PASSWORD" | chpasswd
-
-          # 写入 SSH 配置文件：
-          # Port 22            → 监听标准 22 端口
-          # PermitRootLogin yes → 允许 root 直接登录
-          # PasswordAuthentication yes → 允许密码登录
-          # PubkeyAuthentication yes  → 同时允许密钥登录
-          # UsePAM yes         → 启用 PAM 认证模块
           printf 'Port 22\nPermitRootLogin yes\nPasswordAuthentication yes\nPubkeyAuthentication yes\nUsePAM yes\n' > /etc/ssh/sshd_config
-
-          # 后台启动 sshd 守护进程（-D 前台模式配合 & 后台运行）
           /usr/sbin/sshd -D &
 
-      # ============================================================
-      # 第二步：部署 3x-ui 代理管理面板
-      # 3x-ui 是基于 Xray 的可视化代理面板，支持 VMess/VLESS/Trojan 等协议
-      # 面板默认端口：2053，默认账号：admin，默认密码：admin
-      # ============================================================
-      - name: 2. Install 3x-ui Panel
-        shell: bash
-        run: |
-          apt-get install -y curl wget unzip
-          # 直接下载二进制，绕过 systemd 依赖
-          mkdir -p /usr/local/x-ui
-          latest=$(curl -Ls "https://api.github.com/repos/MHSanaei/3x-ui/releases/latest" | grep '"tag_name"' | sed 's/.*"tag_name": *"\([^"]*\)".*/\1/')
-          curl -Ls "https://github.com/MHSanaei/3x-ui/releases/download/${latest}/x-ui-linux-amd64.tar.gz" -o /tmp/x-ui.tar.gz
-          tar -xzf /tmp/x-ui.tar.gz -C /usr/local/x-ui
-          chmod +x /usr/local/x-ui/x-ui
-          # 直接前台运行（后台挂起），输出错误日志
-          /usr/local/x-ui/x-ui 2>&1 &
-          sleep 10
-          # 打印x-ui进程是否存在
-          ps aux | grep x-ui | grep -v grep || echo "x-ui进程不存在"
-          # 打印x-ui目录内容确认文件完整
-          ls -la /usr/local/x-ui/
-          apt-get install -y iproute2
-          ss -tlnp | grep 2053 && echo "2053端口已监听" || echo "2053端口未监听"
-
-          echo "=========================================="
-          echo "  >>> 3x-ui 面板已部署! <<<"
-          echo "  面板端口 : 2053"
-          echo "  账号     : admin"
-          echo "  密码     : admin"
-          echo "  访问地址 : http://[TailscaleIP]:2053"
-          echo "=========================================="
-
-      # ============================================================
-      # 第三步：安装 Tailscale VPN 并建立隧道
-      # 容器内无法使用 systemd，必须手动启动 tailscaled 守护进程
-      # 使用 userspace-networking 模式绕过容器 tun 设备限制
-      # ============================================================
-      - name: 3. Install & Connect Tailscale VPN
+      - name: 2. Install & Connect Tailscale VPN
         env:
-          # 从 GitHub Secrets 读取 Tailscale 授权密钥
           TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
         run: |
-          # 安装 Tailscale 所需依赖工具
           apt-get install -y curl iptables iproute2 ca-certificates
-
-          # 下载并执行 Tailscale 官方一键安装脚本
           curl -fsSL https://tailscale.com/install.sh | sh
-
-          # 手动后台启动 tailscaled 守护进程
-          # --tun=userspace-networking → 用户态网络模式，不需要 tun 设备（容器必须）
-          # --socks5-server=localhost:1055 → 同时开启本地 SOCKS5 代理端口
-          # 直接用 tun 模式，所有端口全通，一劳永逸。
-          tailscaled &
-
-          # 等待 tailscaled 完成初始化
+          tailscaled --tun=userspace-networking --socks5-server=localhost:1055 &
           sleep 5
-
-          # 使用授权密钥连接到 Tailscale 网络
-          # --hostname → 设置该节点在控制台显示的名称
-          # --accept-routes → 接受其他节点推送的路由
           tailscale up --authkey="$TAILSCALE_AUTHKEY" --hostname="GitHub-SSH-Server" --accept-routes
-
-          # 等待 Tailscale 完成握手并分配 IP
           sleep 5
-
-          # 获取本机在 Tailscale 网络中的 IPv4 地址（100.x.x.x 段）
           ts_ip=$(tailscale ip -4)
-
-          # 打印所有连接信息到 Actions 日志
           echo ""
           echo "=========================================="
           echo "  >>> SSH SERVER IS READY! <<<"
@@ -143,31 +47,17 @@ jobs:
           echo "  Username     : root"
           echo "  Password     : (见 Secrets: SSH_PASSWORD)"
           echo "  >> ssh root@$ts_ip"
-          echo "------------------------------------------"
-          echo "  >>> 3x-ui 面板访问地址 <<<"
-          echo "  http://$ts_ip:2053"
-          echo "  账号: admin  密码: admin"
           echo "=========================================="
 
-      # ============================================================
-      # 第四步：循环保活，撑满48小时上限
-      # 每60秒打印一次心跳日志，防止 Actions 因无输出被判定超时
-      # deadline = 当前时间 + 2875分钟（比 timeout-minutes 少5分钟作为缓冲）
-      # ============================================================
-      - name: 4. Keep Server Alive
-        # 强制使用 bash 执行，因为 $SECONDS 是 bash 内置变量，sh 不支持
+      - name: 3. Keep Server Alive
         shell: bash
         run: |
-          # 计算到期时间戳（单位：秒）
           deadline=$((SECONDS + 2875 * 60))
-
           i=1
-          # 循环直到接近超时时间
           while [ $SECONDS -lt $deadline ]; do
             sleep 60
-            # 计算剩余分钟数
             remaining=$(( (deadline - SECONDS) / 60 ))
             echo "[$i] $(date '+%H:%M:%S') | 已运行 $i 分钟 / 共2875分钟 | 剩余约 $remaining 分钟 | Server running..."
             i=$((i + 1))
           done
-          echo "本次48小时会话结束，等待 cron 自动触发下一次。"
+          echo "本次48小时会话结束。"
