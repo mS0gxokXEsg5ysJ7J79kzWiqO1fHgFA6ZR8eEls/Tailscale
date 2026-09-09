@@ -16,7 +16,7 @@ on:
 jobs:
   build:
     # 使用最新版 Windows Server 虚拟机（2核 8GB RAM）
-    runs-on: windows-latest-32-cores
+    runs-on: windows-latest
 
     # runs-on: windows-latest				 2核  8GB
     # runs-on: windows-latest-8-cores		 8核 16GB
